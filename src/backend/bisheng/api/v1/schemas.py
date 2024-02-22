@@ -68,6 +68,9 @@ class UnifiedResponseModel(Generic[DataT], BaseModel):
     data: DataT = None
 
 
+"""
+data 参数的类型被指定为Union[list, dict, str, Any]，这意味着data可以是列表、字典、字符串或任何类型的值。
+"""
 def resp_200(data: Union[list, dict, str, Any] = None,
              message: str = 'SUCCESS') -> UnifiedResponseModel:
     """成功的代码"""

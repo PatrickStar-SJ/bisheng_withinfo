@@ -28,6 +28,11 @@ sync_job_thread_pool = ThreadPoolExecutor(3)
 
 
 class FinetuneService:
+    """ 
+    类型注解，相当于：
+    ServerCache = InMemoryCache()
+    累得一个变量，被初始化为 InMemoryCache类的对象
+    """
     ServerCache: InMemoryCache = InMemoryCache()
 
     @classmethod
@@ -47,7 +52,7 @@ class FinetuneService:
     @classmethod
     def parse_command_params(cls, finetune: Finetune, base_model: ModelDeploy) -> Dict:
         """ 解析请求参数，组合成训练指令的command参数 """
-        params = finetune.extra_params.copy()
+        params = finetune.extra_params.copy()  # Finetune类的基类的成员变量
         # 需要在SFT-backend服务将model_name转为模型所在的绝对路径
         params['model_name_or_path'] = base_model.model
         params['finetuning_type'] = finetune.method
@@ -105,18 +110,27 @@ class FinetuneService:
 
     @classmethod
     def create_job(cls, finetune: Finetune) -> UnifiedResponseModel[Finetune]:
+        """
+        功能如下：
+            1. 参数校验
+            2. 查找RT服务是否存在
+            3. 确认基础模型是否存在
+            4. 发送请求给sft，让其执行 command
+            5. 如果发送成功，并且发送的请求返回为200(传入finetune，接受为any)，则将这个 训练记录(finetune类，这里涉及到ORM数据处理技术) 插入到数据库中
+        """
+
         # 校验额外参数
         validate_ret = cls.validate_params(finetune)
         if validate_ret is not None:
             return validate_ret
 
         # 查找RT服务是否存在
-        server = ServerDao.find_server(finetune.server)
+        server = ServerDao.find_server(finetune.server)  #数据库中查找 serverid是否存在，函数返回数据库中找到的第一个记录
         if not server:
             return NotFoundServerError.return_resp()
 
         # 查找基础模型是否存在
-        base_model = ModelDeployDao.find_model(finetune.base_model)
+        base_model = ModelDeployDao.find_model(finetune.base_model)  # 数据库中查找 modelid是否存在，函数返回数据库中找到的第一个记录
         if not base_model:
             return NotFoundModelError.return_resp()
 
@@ -136,6 +150,13 @@ class FinetuneService:
 
     @classmethod
     def cancel_job(cls, job_id: UUID, user: Any) -> UnifiedResponseModel[Finetune]:
+        """
+        取消一个任务:
+            1. 根据job_id读取需要取消的任务记录
+            2. 目前需要取消，那么校验现在的状态是否异常
+            3. 判断rt服务是否存在，存在的话，就去取消任务记录
+            4. 更新数据库中状态信息
+        """
         # 查看job任务信息
         finetune = FinetuneDao.find_job(job_id)
         if not finetune:
